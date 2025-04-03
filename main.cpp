@@ -53,7 +53,7 @@ void printDate(std::ostream &out)
 #endif
 
     // Print formatted date and time
-    out << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S") << std::endl;
+    out << std::put_time(&localTime, "%Y-%m-%d") << std::endl;
 }
 
 void touchFile(const std::vector<std::string> &args)
