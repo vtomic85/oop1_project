@@ -60,6 +60,7 @@
         "clocale": "cpp",
         "xfacet": "cpp",
         "xlocale": "cpp",
-        "xlocinfo": "cpp"
+        "xlocinfo": "cpp",
+        "set": "cpp"
     }
 }

@@ -150,19 +150,62 @@ void wordCount(const std::vector<std::string> &args, std::ostream &out)
     }
 }
 
-void trReplace(std::vector<std::string> &args, std::ostream &out)
-{ // Pass by reference
-    if (args.size() < 3)
-        return;
-    std::string &text = args[1];
-    std::string from = args[2];
-    std::string to = (args.size() > 3) ? args[3] : ""; // Default to empty string if missing
+// Helper function to remove surrounding quotes from a string
+std::string removeQuotes(const std::string& str)
+{
+    if (str.size() >= 2 && str.front() == '"' && str.back() == '"')
+    {
+        return str.substr(1, str.size() - 2); // Remove quotes
+    }
+    return str; // Return the string unchanged if no quotes
+}
 
+void trReplace(std::vector<std::string> &args, std::ostream &out)
+{
+    if (args.size() < 3)
+    {
+        std::cerr << "Usage: tr \"text\" \"from\" \"to\" or tr filename \"from\" \"to\"" << std::endl;
+        return;
+    }
+
+    std::string text;
+    std::string from = removeQuotes(args[2]); // Remove quotes if present
+    std::string to = (args.size() > 3) ? removeQuotes(args[3]) : ""; // Default to empty string if missing
+
+    // If the first parameter is a quoted string
+    if (args[1].front() == '"' && args[1].back() == '"')
+    {
+        text = removeQuotes(args[1]); // Remove the surrounding quotes from the string
+    }
+    else
+    {
+        // Otherwise, treat it as a filename
+        std::ifstream file(args[1]);
+        if (!file)
+        {
+            std::cerr << "Error: Cannot open file " << args[1] << std::endl;
+            return;
+        }
+        std::ostringstream buffer;
+        buffer << file.rdbuf();
+        text = buffer.str();
+    }
+
+    // Handle replacing or removing the 'from' substring
     size_t pos = 0;
     while ((pos = text.find(from, pos)) != std::string::npos)
     {
-        text.replace(pos, from.length(), to);
-        pos += to.length(); // Move past the replaced substring
+        if (!to.empty())
+        {
+            // Replace 'from' with 'to'
+            text.replace(pos, from.length(), to);
+            pos += to.length(); // Move past the replaced substring
+        }
+        else
+        {
+            // If 'to' is empty, remove 'from'
+            text.erase(pos, from.length());
+        }
     }
 
     out << text << std::endl;
