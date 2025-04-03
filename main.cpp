@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <set>
+#include <functional>
 
 namespace fs = std::filesystem;
 
@@ -39,20 +40,16 @@ void printTime(std::ostream &out)
 
 void printDate(std::ostream &out)
 {
-    // Get current time
     auto now = std::chrono::system_clock::now();
     std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
 
-    // Convert to local time
     std::tm localTime;
-
-#ifdef _WIN32 // Windows
+#ifdef _WIN32
     localtime_s(&localTime, &currentTime);
-#else // Linux, macOS
+#else
     localtime_r(&currentTime, &localTime);
 #endif
 
-    // Print formatted date and time
     out << std::put_time(&localTime, "%Y-%m-%d") << std::endl;
 }
 
@@ -75,7 +72,7 @@ void removeFile(const std::vector<std::string> &args)
 
 void wordCount(const std::vector<std::string> &args, std::ostream &out)
 {
-    if (args.size() < 3) // If not enough arguments
+    if (args.size() < 3)
     {
         std::cerr << "Usage: wc -w|-c \"text\" or wc -w|-c filename" << std::endl;
         return;
@@ -91,26 +88,23 @@ void wordCount(const std::vector<std::string> &args, std::ostream &out)
     std::string input;
     bool isQuotedString = false;
 
-    // If input is a quoted string (with quotes around it)
     if (args[2].front() == '"')
     {
         isQuotedString = true;
-        input = args[2].substr(1); // Remove the starting quote
+        input = args[2].substr(1);
 
-        // Concatenate all parts of the quoted string
         for (size_t i = 3; i < args.size(); ++i)
         {
             input += " " + args[i];
             if (args[i].back() == '"')
             {
-                input = input.substr(0, input.size() - 1); // Remove the closing quote
+                input = input.substr(0, input.size() - 1);
                 break;
             }
         }
     }
     else
     {
-        // Assume it's a filename, attempt to open the file
         std::ifstream file(args[2]);
         if (!file)
         {
@@ -122,7 +116,6 @@ void wordCount(const std::vector<std::string> &args, std::ostream &out)
         input = buffer.str();
     }
 
-    // If option is -w (word count)
     if (option == "-w")
     {
         int wordCount = 0;
@@ -134,42 +127,39 @@ void wordCount(const std::vector<std::string> &args, std::ostream &out)
         }
         out << wordCount << std::endl;
     }
-    // If option is -c (character count)
     else if (option == "-c")
     {
-        // Remove the closing quote if it's there
         if (!input.empty() && input.back() == '"')
-            input = input.substr(0, input.size() - 1); // Remove the closing quote
+            input = input.substr(0, input.size() - 1);
 
-        // Trim trailing spaces, to avoid counting an extra space at the end
         size_t end = input.find_last_not_of(" \n\r\t");
         if (end != std::string::npos)
             input = input.substr(0, end + 1);
 
-        out << input.length() << std::endl; // Number of characters (including spaces)
+        out << input.length() << std::endl;
     }
 }
 
-// Helper function to remove surrounding quotes from a string
-std::string removeQuotes(const std::string& str)
+std::string removeQuotes(const std::string &str)
 {
-    if (str.size() >= 2 && str.front() == '"' && str.back() == '"')
-    {
-        return str.substr(1, str.size() - 2); // Remove quotes
-    }
-    return str; // Return the string unchanged if no quotes
+    if (str.empty())
+        return str;
+
+    if (str.front() == '"' && str.back() == '"')
+        return str.substr(1, str.size() - 2); // Remove the surrounding quotes
+    return str;
 }
 
 void trReplace(std::vector<std::string> &args, std::ostream &out)
 {
-    if (args.size() < 3)
+    if (args.size() < 4)
     {
         std::cerr << "Usage: tr \"text\" \"from\" \"to\" or tr filename \"from\" \"to\"" << std::endl;
         return;
     }
 
     std::string text;
-    std::string from = removeQuotes(args[2]); // Remove quotes if present
+    std::string from = removeQuotes(args[2]);                        // Remove quotes if present
     std::string to = (args.size() > 3) ? removeQuotes(args[3]) : ""; // Default to empty string if missing
 
     // If the first parameter is a quoted string
@@ -219,15 +209,14 @@ void headLines(const std::vector<std::string> &args, std::ostream &out)
         return;
     }
 
-    // Extract individual line numbers from the -nXYZ format
-    std::string numberString = args[1].substr(2); // Skip "-n"
+    std::string numberString = args[1].substr(2);
     std::set<int> targetLines;
 
     for (char c : numberString)
     {
         if (isdigit(c))
         {
-            targetLines.insert(c - '0'); // Convert character to integer
+            targetLines.insert(c - '0');
         }
         else
         {
@@ -241,7 +230,6 @@ void headLines(const std::vector<std::string> &args, std::ostream &out)
 
     if (isQuotedText)
     {
-        // Join arguments to reconstruct the quoted string
         std::string input;
         for (size_t i = 2; i < args.size(); ++i)
         {
@@ -250,7 +238,6 @@ void headLines(const std::vector<std::string> &args, std::ostream &out)
             input += args[i];
         }
 
-        // Remove surrounding quotes
         if (input.front() == '"' && input.back() == '"')
         {
             input = input.substr(1, input.size() - 2);
@@ -260,28 +247,26 @@ void headLines(const std::vector<std::string> &args, std::ostream &out)
     }
     else
     {
-        // Assume it's a filename
         std::ifstream file(args[2]);
         if (!file)
         {
             std::cerr << "Error: Cannot open file " << args[2] << std::endl;
             return;
         }
-        inputStream << file.rdbuf(); // Read file content into stringstream
+        inputStream << file.rdbuf();
     }
 
     std::string line;
     int lineNumber = 1;
     while (std::getline(inputStream, line))
     {
-        if (targetLines.count(lineNumber)) // Check if this line is in the requested set
+        if (targetLines.count(lineNumber))
         {
             out << line << std::endl;
         }
         lineNumber++;
     }
 }
-
 
 void executeCommand(const std::string &command, std::ostream &out);
 
@@ -306,28 +291,27 @@ void executeCommand(const std::string &command, std::ostream &out)
         if (token.front() == '"' && !inQuotes)
         {
             inQuotes = true;
-            quotedArg = token; // Keep the quotes for now
+            quotedArg = token;
         }
         else if (token.back() == '"' && inQuotes)
         {
             inQuotes = false;
-            quotedArg += " " + token; // Keep the closing quote
+            quotedArg += " " + token;
             args.push_back(quotedArg);
         }
         else if (inQuotes)
         {
-            quotedArg += " " + token; // Continue accumulating the quoted string
+            quotedArg += " " + token;
         }
         else
         {
-            args.push_back(token); // Normal token
+            args.push_back(token);
         }
     }
 
     if (args.empty())
         return;
 
-    // Now, use the updated args vector
     if (args[0] == "echo")
         echo(args, out);
     else if (args[0] == "prompt")
@@ -341,7 +325,7 @@ void executeCommand(const std::string &command, std::ostream &out)
     else if ((args[0] == "rm") || (args[0] == "truncate"))
         removeFile(args);
     else if (args[0] == "wc")
-        wordCount(args, out); // Call wordCount with args as is
+        wordCount(args, out);
     else if (args[0] == "tr")
         trReplace(args, out);
     else if (args[0].find("head") == 0)
@@ -369,16 +353,20 @@ void processPipes(std::string input)
     {
         pipes.emplace_back(segment);
     }
+
     std::ostringstream out;
+    std::ostringstream currentInput;
     for (size_t i = 0; i < pipes.size(); ++i)
     {
         std::string command;
         std::getline(pipes[i], command);
-        executeCommand(command, out);
-        if (i < pipes.size() - 1)
+        if (i == 0)
+            executeCommand(command, out); // For the first command
+        else
         {
             out.seekp(0, std::ios::beg);
             out.str("");
+            executeCommand(command, out); // For subsequent commands
         }
     }
     std::cout << out.str();
@@ -391,12 +379,10 @@ int main()
     {
         std::cout << promptLabel;
         std::getline(std::cin, input);
+
         if (input == "exit")
             break;
-        if (input.find('|') != std::string::npos)
-            processPipes(input);
-        else
-            executeCommand(input, std::cout);
+
+        processPipes(input);
     }
-    return 0;
 }
