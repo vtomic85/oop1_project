@@ -9,6 +9,7 @@
 #include <map>
 #include <algorithm>
 #include <iomanip>
+#include <set>
 
 namespace fs = std::filesystem;
 
@@ -36,22 +37,23 @@ void printTime(std::ostream &out)
     out << buffer << std::endl;
 }
 
-void printDate(std::ostream& out) {
+void printDate(std::ostream &out)
+{
     // Get current time
     auto now = std::chrono::system_clock::now();
     std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
-    
+
     // Convert to local time
     std::tm localTime;
-    
-    #ifdef _WIN32  // Windows
-        localtime_s(&localTime, &currentTime);
-    #else         // Linux, macOS
-        localtime_r(&currentTime, &localTime);
-    #endif
+
+#ifdef _WIN32 // Windows
+    localtime_s(&localTime, &currentTime);
+#else // Linux, macOS
+    localtime_r(&currentTime, &localTime);
+#endif
 
     // Print formatted date and time
-    out << std::put_time(&localTime, "%Y-%m-%d") << std::endl;
+    out << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S") << std::endl;
 }
 
 void touchFile(const std::vector<std::string> &args)
@@ -73,35 +75,42 @@ void removeFile(const std::vector<std::string> &args)
 
 void wordCount(const std::vector<std::string> &args, std::ostream &out)
 {
-    if (args.size() < 3)
+    if (args.size() < 3) // If not enough arguments
     {
         std::cerr << "Usage: wc -w|-c \"text\" or wc -w|-c filename" << std::endl;
         return;
     }
 
-    std::string input;
-    bool isFile = true;
+    std::string option = args[1]; // First argument should be -w or -c
+    if (option != "-w" && option != "-c")
+    {
+        std::cerr << "Invalid option. Use -w for word count or -c for character count." << std::endl;
+        return;
+    }
 
-    // Check if the input is a quoted string (i.e., if it starts and ends with a quote)
+    std::string input;
+    bool isQuotedString = false;
+
+    // If input is a quoted string (with quotes around it)
     if (args[2].front() == '"')
     {
-        isFile = false;
-        input = args[2].substr(1); // Start after the opening quote
+        isQuotedString = true;
+        input = args[2].substr(1); // Remove the starting quote
 
-        // Concatenate the rest of the arguments until we find the closing quote
+        // Concatenate all parts of the quoted string
         for (size_t i = 3; i < args.size(); ++i)
         {
             input += " " + args[i];
             if (args[i].back() == '"')
             {
-                input = input.substr(0, input.size() - 1); // Remove the ending quote
+                input = input.substr(0, input.size() - 1); // Remove the closing quote
                 break;
             }
         }
     }
     else
     {
-        // Assume it's a filename
+        // Assume it's a filename, attempt to open the file
         std::ifstream file(args[2]);
         if (!file)
         {
@@ -113,23 +122,31 @@ void wordCount(const std::vector<std::string> &args, std::ostream &out)
         input = buffer.str();
     }
 
-    // Perform word or character count
-    if (args[1] == "-w")
+    // If option is -w (word count)
+    if (option == "-w")
     {
-        std::istringstream iss(input);
-        int count = 0;
+        int wordCount = 0;
+        std::istringstream stream(input);
         std::string word;
-        while (iss >> word)
-            count++;
-        out << count << std::endl;
+        while (stream >> word)
+        {
+            wordCount++;
+        }
+        out << wordCount << std::endl;
     }
-    else if (args[1] == "-c")
+    // If option is -c (character count)
+    else if (option == "-c")
     {
-        out << input.length() << std::endl;
-    }
-    else
-    {
-        std::cerr << "Invalid option. Use -w for word count or -c for character count." << std::endl;
+        // Remove the closing quote if it's there
+        if (!input.empty() && input.back() == '"')
+            input = input.substr(0, input.size() - 1); // Remove the closing quote
+
+        // Trim trailing spaces, to avoid counting an extra space at the end
+        size_t end = input.find_last_not_of(" \n\r\t");
+        if (end != std::string::npos)
+            input = input.substr(0, end + 1);
+
+        out << input.length() << std::endl; // Number of characters (including spaces)
     }
 }
 
@@ -154,38 +171,74 @@ void trReplace(std::vector<std::string> &args, std::ostream &out)
 void headLines(const std::vector<std::string> &args, std::ostream &out)
 {
     if (args.size() < 3)
+    {
+        std::cerr << "Usage: head -nXYZ filename.ext or head -nXYZ \"some text\"\n";
         return;
+    }
 
-    // Extract individual digits as separate numbers (keeping the single-digit approach)
-    std::string numbers = args[1].substr(1);
-    std::vector<int> lines;
-    for (char c : numbers)
+    // Extract individual line numbers from the -nXYZ format
+    std::string numberString = args[1].substr(2); // Skip "-n"
+    std::set<int> targetLines;
+
+    for (char c : numberString)
     {
         if (isdigit(c))
-            lines.push_back(c - '0'); // Convert character to integer
+        {
+            targetLines.insert(c - '0'); // Convert character to integer
+        }
+        else
+        {
+            std::cerr << "Invalid line number format.\n";
+            return;
+        }
     }
 
-    // Join remaining arguments into a single string (handles multi-word input)
-    std::ostringstream inputStream;
-    for (size_t i = 2; i < args.size(); ++i)
+    std::stringstream inputStream;
+    bool isQuotedText = args[2].front() == '"';
+
+    if (isQuotedText)
     {
-        if (i > 2)
-            inputStream << " ";
-        inputStream << args[i];
+        // Join arguments to reconstruct the quoted string
+        std::string input;
+        for (size_t i = 2; i < args.size(); ++i)
+        {
+            if (i > 2)
+                input += " ";
+            input += args[i];
+        }
+
+        // Remove surrounding quotes
+        if (input.front() == '"' && input.back() == '"')
+        {
+            input = input.substr(1, input.size() - 2);
+        }
+
+        inputStream.str(input);
     }
-    std::istringstream iss(inputStream.str());
+    else
+    {
+        // Assume it's a filename
+        std::ifstream file(args[2]);
+        if (!file)
+        {
+            std::cerr << "Error: Cannot open file " << args[2] << std::endl;
+            return;
+        }
+        inputStream << file.rdbuf(); // Read file content into stringstream
+    }
 
     std::string line;
     int lineNumber = 1;
-    while (std::getline(iss, line))
+    while (std::getline(inputStream, line))
     {
-        if (std::find(lines.begin(), lines.end(), lineNumber) != lines.end())
+        if (targetLines.count(lineNumber)) // Check if this line is in the requested set
         {
             out << line << std::endl;
         }
         lineNumber++;
     }
 }
+
 
 void executeCommand(const std::string &command, std::ostream &out);
 
@@ -210,27 +263,28 @@ void executeCommand(const std::string &command, std::ostream &out)
         if (token.front() == '"' && !inQuotes)
         {
             inQuotes = true;
-            quotedArg = token.substr(1); // Remove the opening quote
+            quotedArg = token; // Keep the quotes for now
         }
         else if (token.back() == '"' && inQuotes)
         {
             inQuotes = false;
-            quotedArg += " " + token.substr(0, token.size() - 1); // Remove closing quote
+            quotedArg += " " + token; // Keep the closing quote
             args.push_back(quotedArg);
         }
         else if (inQuotes)
         {
-            quotedArg += " " + token;
+            quotedArg += " " + token; // Continue accumulating the quoted string
         }
         else
         {
-            args.push_back(token);
+            args.push_back(token); // Normal token
         }
     }
 
     if (args.empty())
         return;
 
+    // Now, use the updated args vector
     if (args[0] == "echo")
         echo(args, out);
     else if (args[0] == "prompt")
@@ -244,7 +298,7 @@ void executeCommand(const std::string &command, std::ostream &out)
     else if ((args[0] == "rm") || (args[0] == "truncate"))
         removeFile(args);
     else if (args[0] == "wc")
-        wordCount(args, out);
+        wordCount(args, out); // Call wordCount with args as is
     else if (args[0] == "tr")
         trReplace(args, out);
     else if (args[0].find("head") == 0)
